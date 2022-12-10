@@ -4,17 +4,6 @@ package auctionhouse;
  * This class holds the logic/communication of the Auction House.
  * The Auction House can communicate with the bank and an agent.
  * Each AuctionHouse creates the following objects based on private classes:
- * AuctionServer:This active object accepts socket requests and creates
- * an active object AgentProxy for that socket.
- * AuctionIn: This active object is dedicated to receiving/processing
- * incoming messages from the bank.
- * AgentProxy(i): These active objects are dedicated two receiving,
- * processing, and responding to ONE agent socket.
- * Countdown: This active object is dedicated to periodically updating
- * time elasped since an auction item has been on sale. It also
- * removes any item's auction has ended(30 seconds since
- * last bid/creation.
- * last bid/creation.
  */
 public class AuctionHouse{
     private ServerSocket server; 
