@@ -1,4 +1,4 @@
-package auctionhouse;
+package Auction;
 
 /**
  * This class holds the logic/communication of the Auction House.
