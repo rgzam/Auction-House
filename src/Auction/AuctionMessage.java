@@ -18,7 +18,7 @@ public class AuctionMessage implements Serializable {
     private final String name; //name of the item
 
     /**
-     * Enums to let the Agent/Auction House know the topic when
+     * To let the Agent/Auction House know the topic when
      * sending/receiving messages.
      */
     public enum AMType {
