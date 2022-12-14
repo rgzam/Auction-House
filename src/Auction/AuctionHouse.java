@@ -208,3 +208,484 @@ public class AuctionHouse{
             }
         }
     }
+
+/**
+     * This class is dedicated to communicating/processing messages from/with
+     * agents.
+     * Each instance of this class represents communication with one agent.
+     */
+    private class AgentProxy implements Runnable {
+        private final Socket agentSocket; //the socket connected to an agent
+        private ObjectInputStream agentIn; //Input stream for agentSocket
+        private ObjectOutputStream agentOut;//output stream for agentSocket
+        private UUID agentId; //The UUID of the agent when it registers
+        private AuctionMessage message = null; //The message read from agentIn
+        private final BlockingQueue<Boolean> bankSignOff;
+        //Blocking queue for waiting on a HOLD response from the bank
+
+        /**
+         * Constructor for an AgentProxy object. The constructor takes in
+         * an accepted socket from the server variable, opens streams from it,
+         * and begins communication.
+         * @param socket the accepted socket from the server variable
+         */
+        public AgentProxy(Socket socket){
+            this.agentSocket = socket;
+            bankSignOff = new LinkedBlockingDeque<>();
+            try{
+                agentIn = new ObjectInputStream(agentSocket.getInputStream());
+                agentOut = new ObjectOutputStream(
+                        agentSocket.getOutputStream());
+                Thread client = new Thread(this);
+                client.start();
+            }catch(IOException e){
+                activeAgents.remove(this);
+            }
+        }
+
+        /**
+         * The run method is dedicating to reading message from an agent.
+         * The method also adds the incoming message to the log
+         */
+        @Override
+        public void run() {
+            do{
+                try{
+                    message = (AuctionMessage) agentIn.readObject();
+                    AMType type = message.getType();
+                    if(type != AMType.UPDATE){
+                        log.add("From a client: " + message);
+                    }
+                    process(message);
+                }catch (IOException|ClassNotFoundException e){
+                    agentShutdown(false);
+                    message = null;
+                }
+            }while(message != null && run);
+        }
+
+        /**
+         *This method either gracefully or forcefully closes the AgentProxy's
+         * socket, streams, and threads.A graceful shutdown means messaging
+         * agents to let them know the auction house is shutting down. A
+         * forceful shutdown means either to shutdown from a DEREGISTER message
+         * or shutdown due to Exceptions
+         * @param reason True if a graceful shutdown, false if for
+         *               error handling/DEREGISTER message
+         */
+        private void agentShutdown(Boolean reason){
+            message = null;
+            activeAgents.remove(this);
+            try{
+                if(reason){
+                    AuctionMessage shutdown = AuctionMessage.Builder.newB()
+                            .type(AuctionMessage.AMType.DEREGISTER)
+                            .build();
+                    sendOut(shutdown);
+                    log.add("Connection to Agent " +agentId+" closed");
+                    if(!agentSocket.isClosed()){
+                        agentOut.close();
+                        agentIn.close();
+                        agentSocket.close();
+                    }
+                }else{
+                    if(!agentSocket.isClosed()){
+                        agentOut.close();
+                        agentIn.close();
+                        agentSocket.close();
+                    }
+                }
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * This method is a switch to redirect incoming messages from agents
+         * to the appropriate method for processing.
+         * @param message The message sent from an agent
+         */
+        private void process(AuctionMessage message){
+            AMType type = message.getType();
+            switch(type){
+                case BID:
+                    bid(message);
+                    break;
+                case REGISTER:
+                    register(message);
+                    break;
+                case UPDATE:
+                    update();
+                    break;
+                case DEREGISTER:
+                    agentShutdown(false);
+                    break;
+            }
+        }
+
+        /**
+         * This method creates the message with the updated catalogue
+         * and passes it to sendOut to send to the agent
+         */
+        private void update(){
+            AuctionMessage update = AuctionMessage.Builder.newB()
+                    .type(AMType.UPDATE)
+                    .id(auctionId)
+                    .list(catalogue)
+                    .build();
+            sendOut(update);
+        }
+
+        /**
+         * This method is letting the connected agent know they successfully
+         * registered and sends the catalogue of items for sale. The method
+         * also stores the agent's UUID for future reference
+         * @param message The register message the agent sent
+         */
+        private void register(AuctionMessage message){
+            agentId = message.getId();
+            AuctionMessage reply =AuctionMessage.Builder.newB()
+            .type(AMType.REGISTER).id(auctionId).list(catalogue).build();
+            sendOut(reply);
+        }
+
+        /**
+         * This replaces the new bidder/amount with the old bidder/amount and
+         * lets the old bidder know they were outbided
+         * @param oldBidder UUID of the last bidder
+         * @param item The item that has a new bidder
+         */
+        private void outBid(UUID oldBidder,Item item){
+            AgentProxy agent = agentSearch(oldBidder);
+            AuctionMessage outbid = AuctionMessage.Builder.newB()
+                    .type(AMType.OUTBID)
+                    .item(item.getItemID())
+                    .name(item.name())
+                    .id(agentId)
+                    .build();
+            assert agent != null;
+            agent.sendOut(outbid);
+        }
+
+        /**
+         * The item's auction has ended and there's a bidder. This method
+         * lets the bidder know they won.
+         * @param item The item the bidder won
+         */
+        private void winner(Item item){
+            AuctionMessage winner = AuctionMessage.Builder.newB()
+                    .type(AMType.WINNER)
+                    .id(agentId)
+                    .item(item.getItemID())
+                    .name(item.name())
+                    .amount(item.getCurrentBid())
+                    .build();
+            sendOut(winner);
+        }
+
+        /**
+         * This method grabs the itemID, bidderId, name, and amount of the
+         * item to bid on. First it checks if the item is still for sale, then
+         * checks if the bid amount is above the minimum/current bid. Then it
+         * requests the bank to hold the bidded funds and waits for a response.
+         * After receiving the response, it then decides whether to reject or
+         * accept the bid.
+         * @param message The message with AMType BID
+         */
+        private void bid(AuctionMessage message){
+            UUID itemID = message.getItem();
+            UUID bidderId = message.getId();
+            String name = message.getName();
+            double amount = message.getAmount();
+            Item bidItem = itemSearch(itemID);
+            if(bidItem == null){
+                reject(itemID,name);
+                return;
+            }
+            double value = bidItem.getCurrentBid();
+            if( value < bidItem.getMinimumBid()){
+                value = bidItem.getMinimumBid();
+            }
+            if(amount > value){
+                Message requestHold = new Message.Builder()
+                        .command(Command.HOLD)
+                        .accountId(bidderId).amount(amount).send(this.agentId);
+                try{
+                    //requests the hold.
+                    sendToBank(requestHold);
+                    //waits for the response from bank.
+                    Boolean success = bankSignOff.take();
+                    if(success){
+                        //accepts bid and lets the last bidder know
+                        //they were outbidded
+                        UUID oldBidder = bidItem.getBidder();
+                        if(oldBidder != null){
+                            release(oldBidder, value);
+                            outBid(oldBidder, bidItem);
+                        }
+                        bidItem.outBid(bidderId, amount);
+                        accept(bidItem.getItemID(), bidItem.name());
+                    }else{
+                        reject(itemID,name);
+                    }
+                }catch(InterruptedException e){
+                    e.printStackTrace();
+                }
+            }else{
+                reject(itemID,name);
+            }
+        }
+
+        /**
+         * requests the bank to release the hold of (amount) amount on account
+         * id
+         * @param id the account(bidder) having their funds released
+         * @param amount the amount requested to release
+         */
+        private synchronized void release(UUID id, Double amount){
+            Message release = new Message.Builder()
+                    .command(Command.RELEASE_HOLD)
+                    .accountId(id).amount(amount).send(auctionId);
+            sendToBank(release);
+        }
+
+        /**
+         * Lets the bidder know its bid was rejected due to various reasons
+         * (not enough funds, bid not high enough, etc.)
+         * @param itemID The UUID of the item bid on
+         * @param name the name of the item
+         */
+        private void reject(UUID itemID, String name){
+            AuctionMessage reject = AuctionMessage.Builder.newB().
+                    type(AMType.REJECTION)
+                    .name(name)
+                    .item(itemID)
+                    .build();
+            sendOut(reject);
+        }
+
+        /**
+         * Once a bid by an Agent is accepted, this method lets the agent
+         * know their bid was accepted. The message also contains the updated
+         * catalogue
+         * @param item UUID of the item bid on
+         * @param name String/name of the item bid on
+         */
+        private void accept(UUID item, String name){
+            AuctionMessage accept = AuctionMessage.Builder.newB()
+                    .type(AMType.ACCEPTANCE)
+                    .id(item)
+                    .name(name)
+                    .list(catalogue)
+                    .build();
+            sendOut(accept);
+        }
+
+        /**
+         * This method is given an AuctionMessage and writes/sends it to
+         * agentSocket. The method add the sent message to the log.
+         * @param message the message being sent
+         */
+        private void sendOut(AuctionMessage message){
+            try{
+                if(message.getType() != AMType.UPDATE){
+                    log.add("To Agent: " + message);
+                }
+                agentOut.reset();
+                agentOut.writeObject(message);
+            }catch(IOException e){
+                agentShutdown(false);
+            }
+        }
+    }
+
+    /**
+     * This class is dedicated to updating the seconds left for items on
+     * sale (i.e. updating timeLeft in the Items in catalogue).
+     */
+    private class Countdown implements Runnable{
+        @Override
+        public void run() {
+            while(run){
+                try{
+                    int needed =  4 - catalogue.size();
+                    if(needed > 0){
+                        addItems(needed);
+                    }
+                    for(int i = 0;i < catalogue.size(); i++){
+                        long currentTime = System.currentTimeMillis();
+                        Item item = catalogue.get(i);
+                        item.updateTimer(currentTime);
+                        long timeLeft = item.getTimeLeft();
+                        if(timeLeft <= 0){
+                            itemResult(item);
+                        }
+                    }
+                    Thread.sleep(200);
+                }catch (InterruptedException e){
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    /**
+     * After the time expires on an Item for sale. This method checks if
+     * there was any bidders and sends the WINNER message to that bidder.
+     * Also releases the hold on the bidders amount.
+     * @param item the item being checked
+     */
+    private void itemResult(Item item){
+        UUID bidder = item.getBidder();
+        AgentProxy agent = agentSearch(bidder);
+        if (agent != null) {
+            agent.winner(item);
+            Message release = new Message.Builder()
+                    .command(Command.RELEASE_HOLD)
+                    .amount(item.getCurrentBid())
+                    .accountId(bidder).send(auctionId);
+            sendToBank(release);
+        }
+        catalogue.remove(item);
+    }
+
+    /**
+     * Sends the given message to the bank and adds it to the log for display.
+     * Looped messages (GET_AVAILABLE) are ignored when adding to log.
+     * @param message message being sent to the bank.
+     */
+    private synchronized void sendToBank(Message message) {
+        try {
+            Command temp = message.getCommand();
+            if(temp != Command.GET_AVAILABLE){
+                log.add("Bank: " + message);
+            }
+            out.reset();
+            out.writeObject(message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * searches for agent in active agent list
+     * @param id id of agent we want
+     * @return returns the agentProxy we want, null otherwise
+     */
+    private AgentProxy agentSearch(UUID id){
+        for(AgentProxy agent: activeAgents){
+            if(agent.agentId.equals(id)){
+                return agent;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * searches the catalogue for an item based on UUID
+     * @param id the UUID of the item being searched
+     * @return returns the item searched, or null if item isn't found
+     */
+    private Item itemSearch(UUID id){
+        for(Item item: catalogue){
+            if(item.getItemID().equals(id)){
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * This method is used for AuctionGui/Auction communication. The UiUpdater
+     * Thread  in AuctionGui checks if the Auction object was able to connect
+     * and register to the bank.
+     * @return returns true if Auction connected and registered with the bank.
+     * Returns false otherwise
+     */
+    public boolean checkRegistration(){
+        try{
+            return check.take();
+        }catch(InterruptedException e){
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    /**
+     * This method closes all sockets and streams. It then signals all threads
+     * to stop after finishing their current task
+     * (by making them throw exceptions)
+     */
+    public void shutdown(){
+        try{
+            run = false;
+            NetInfo serverInfo = new NetInfo(ip,port);
+            List<NetInfo> ahInfo = new LinkedList<>();
+            ahInfo.add(serverInfo);
+            Message deregister = new Message.Builder()
+                    .command(Command.DEREGISTER_AH)
+                    .netInfo(ahInfo).send(auctionId);
+            sendToBank(deregister);
+            //out.writeObject(deregister);
+            while(!activeAgents.isEmpty()){
+                activeAgents.get(0).message = null;
+                activeAgents.get(0).agentShutdown(true);
+            }
+            out.close();
+            input.close();
+            server.close();
+        }catch(IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    public void getBankBalance(){
+        Message getAvailable = new Message
+                .Builder()
+                .command(Command.GET_AVAILABLE)
+                .send(auctionId);
+        sendToBank(getAvailable);
+    }
+
+    /**
+     * @return returns the catalogue
+     */
+    public ArrayList<Item> getCatalogue(){
+        return catalogue;
+    }
+
+    /**
+     * @return returns the log ArrayList
+     */
+    public ArrayList<String> getLog(){
+        return log;
+    }
+
+    /**
+     * @return returns the balance parameter
+     */
+    public double getBalance(){
+        return balance;
+    }
+
+    /**
+     * Grabs the first 4 digits of a given UUID and returns a string
+     * @param aId The UUID being turned into a 4 digit string
+     * @return returns a 4 digit string of the given UUID
+     */
+    public String getShortId(UUID aId){
+        String id = aId.toString();
+        String shortened = "";
+        for(int i = 0; i < 4;i++){
+            shortened = shortened.concat(String.valueOf(id.charAt(i)));
+        }
+        return shortened;
+    }
+
+    /**
+     * @return returns the auctionId parameter
+     */
+    UUID getAuctionId(){
+        return auctionId;
+    }
+}
