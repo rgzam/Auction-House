@@ -1,10 +1,5 @@
 package Auction;
 
-import shared.A_AH_Messages;
-import shared.A_AH_Messages.A_AH_MTopic;
-import shared.Items.Item;
-import shared.Message;
-
 /**
  * AgentActions contains the methods that directly involve interacting with the
  * agent.
