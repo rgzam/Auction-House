@@ -1,4 +1,4 @@
-package auctionhouse;
+package Auction;
 
 import java.io.Serializable;
 import java.util.UUID;
