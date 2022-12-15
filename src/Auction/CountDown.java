@@ -1,5 +1,10 @@
 package Auction;
 
+import Auction.ConnectionReqs;
+import Auction.DBMessage;
+import Auction.Item;
+import Auction.Message;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;

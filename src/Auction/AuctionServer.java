@@ -1,5 +1,8 @@
 package Auction;
 
+import Auction.ConnectionReqs;
+import Auction.Message;
+
 import java.io.IOException;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -28,13 +31,10 @@ public class AuctionServer {
     static List<AH_AgentThread> activeAgents = new LinkedList<>();
 
     /**
-     * try to connect to bank and receives
+     * main takes input from command line, connects to bank and receives
      * connections to auction house from agents within a while loop.
      * The argument in order are Auction port int, bank port int,
      * bank ip address String, bank name String
-     *
-     * @param args String[]
-     * @throws IOException for command input and
      */
     public static void main(String[] args) throws IOException {
         if(args.length != 4) {
@@ -77,6 +77,11 @@ public class AuctionServer {
         }
     }
 
+    /**
+     * getAuctionId returns auctionId
+     *
+     * @return auctionId int
+     */
     public static int getAuctionId() {
         return auctionId;
     }

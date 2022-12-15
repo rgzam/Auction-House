@@ -1,5 +1,10 @@
 package Auction;
 
+import Auction.A_AH_Messages;
+import Auction.A_AH_Messages.A_AH_MTopic;
+import Auction.Item;
+import Auction.Message;
+
 /**
  * AgentActions contains the methods that directly involve interacting with the
  * agent.
@@ -9,16 +14,6 @@ public class AgentActions {
     private static int    bidderId;
     private static String name;
 
-    /**
-     * This method grabs the itemID, bidderId, name, and amount of the
-     * item to bid on. First it checks if the item is still for sale, then
-     * checks if the bid amount is above the minimum/current bid. Then it
-     * requests the bank to hold the bidded funds and waits for a response.
-     * After receiving the response, it then decides whether to reject or
-     * accept the bid.
-     *
-     * @param message The message with AMType BID
-     */
     static void bid(A_AH_Messages message) {
         itemID   = message.getItem();
         bidderId = message.getAccountId();
@@ -86,9 +81,6 @@ public class AgentActions {
      * Once a bid by an Agent is accepted, this method lets the agent
      * know their bid was accepted. The message also contains the updated
      * catalogue
-     *
-     * @param item int of the item bid on
-     * @param name String/name of the item bid on
      */
     private static void accept(int item, String name){
         System.out.println("Return bid SUCCESS" + item);
@@ -103,8 +95,6 @@ public class AgentActions {
     /**
      * outBid replaces the new bid/bidder with the new ones and
      * tells the old bidder they were outbid.
-     *
-     * @param oldBidder int ID
      */
     private static void outBid(int oldBidder){
         AH_AgentThread agent = AuctionServer.agentSearch(oldBidder);
@@ -157,8 +147,6 @@ public class AgentActions {
     /**
      * Lets the bidder know its bid was rejected due to various reasons
      * (not enough funds, bid not high enough, etc.)
-     * @param itemId The int of the item bid on
-     * @param name the name of the item
      */
     private static void reject(int itemId, String name) {
         System.out.println("Bid rejected");
@@ -172,9 +160,6 @@ public class AgentActions {
 
     /**
      * itemSearch searches the auctionList for an item of matching id
-     *
-     * @param itemId the int of the item being searched
-     * @return returns the item searched, or null if item isn't found
      */
     private static Item itemSearch(int itemId) {
         for(Item item: CountDown.getAuctionList()) {
@@ -188,8 +173,6 @@ public class AgentActions {
     /**
      * requests the bank to release the hold of (amount) amount on account
      * id
-     * @param id the account(bidder) having their funds released
-     * @param amount the amount requested to release
      */
     private static synchronized void release(int id, int amount) {
         Message unBlock = new Message.Builder()

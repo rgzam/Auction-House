@@ -1,5 +1,8 @@
 package Auction;
 
+import Auction.ConnectionReqs;
+import Auction.Message;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -19,16 +22,6 @@ public class BankActions {
         return active;
     }
 
-    /**
-     * registerBank creates message for bank registration, processes response
-     * to get database ip address and port number before calling CountDown
-     * on a separate thread. Returns message response and prints connection
-     * success message.
-     *
-     * @param reqsList List<ConnectionReqs> String ip and int port
-     * @param name String
-     * @return Message bank message class
-     */
     public Message registerBank(List<ConnectionReqs> reqsList, String name) {
         Message message = new Message.Builder().command(Message.Command.REGISTERHOUSE)
                 .connectionReqs(reqsList).accountName(name).nullId();

@@ -1,5 +1,10 @@
 package Auction;
 
+import Auction.A_AH_Messages;
+import Auction.ConnectionReqs;
+import Auction.Item;
+import Auction.Message;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
