@@ -19,7 +19,6 @@ public class Item {
 
 			@Override
 			public void run() {
-				// 定时，时间到发给出价最高的即可
 				String outbidMessage = "replace\t" + "win\t" + "replace\t" + "replace\t" + getName() + "\t"
 						+ currentBid + "\t";
 				currentHolder.agentHandler.send(outbidMessage);
