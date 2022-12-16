@@ -24,7 +24,7 @@ In order disconnect from the bank you must input the command "bye".
 
 ## Auction House
 To start the auctionhouse you must enter the following command:
-java -jar AuctionHouse.jar AuctionHouse 4222 localhost 4223 items1.txt
+java -jar AuctionHouse.jar AuctionHouse 4222 localhost 4223 items.txt
 The Items list must be in the same path as the jar in order take as an input argument.
 If you want to run the auctionhouse we first need the bank to already be running so we can connect to it.
 The AuctionHouse will display a message saying that it's receiving and sending.
