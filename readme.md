@@ -3,7 +3,7 @@
 ## Name: Shi Ge
 ## Name: Junyi Zheng
 
-##Bank
+## Bank
 In order to start the Bank you first need to run the Bank.jar
  and it takes an input argument which will be the PortNumber
  ex: java -jar Bank.jar (portnumber)
