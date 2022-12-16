@@ -1,4 +1,3 @@
-
 import java.awt.*;
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -8,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -31,12 +31,12 @@ public class AuctionServer implements Runnable {
 		try {
 			server = new ServerSocket(port);
 			auctionPort = port;
-			auctionName = Inet4Address.getLocalHost().getHostName() + String.valueOf(port);
+            		auctionHouseHost = InetAddress.getLocalHost().getHostName();
 			connectToBank("localhost", 4444);
 			createAccount();
 			start();
 			initAuction();
-			startingFunds = 100;
+			startingFunds = 1000;
 		} catch (IOException ioe) {
 			System.out.println("Can not bind to port " + port + ": " + ioe.getMessage());
 
@@ -72,18 +72,19 @@ public class AuctionServer implements Runnable {
 		// String message =
 	}
 
-	public void initAuction() // function which add Item object to the array when server starts running
-	{
-		ItemToBid.add(new Item("Iphone 14s", "20"));
-		ItemToBid.add(new Item("c++ primer", "20"));
-		ItemToBid.add(new Item("mac book", "40"));
-		ItemToBid.add(new Item("airpods", "30"));
-		// ItemToBid.add(new Item("beats", "25"));
-		// ItemToBid.add(new Item("Iphone 13s", "20"));
-		// ItemToBid.add(new Item("unix programming", "20"));
-		// ItemToBid.add(new Item("huawei mate 40", "40"));
-		// ItemToBid.add(new Item("oneplus 7", "30"));
-		// ItemToBid.add(new Item("earbuds pro", "25"));
+	public void addRandomItemsForAuction // function which add Item object to the array when server starts running
+	{	
+	  int randNum = ThreadLocalRandom.current().
+	  	nextInt(0, auctionItems.size()-1;
+	
+        Item item = new Item(auctionItems.get(randNum), itemNum);
+        itemNum++;
+        Thread threadItem = new Thread(item);
+        
+        currentAuctions.add(item);
+        liveAuctions.add(threadItem);
+
+        auctionItems.remove(randNum);
 	}
 
 	public void run() {
@@ -127,11 +128,18 @@ public class AuctionServer implements Runnable {
 	}
 
 	public static void main(String args[]) {
-		AuctionServer server = null;
-		if (args.length != 1)
-			System.out.println("Usage: java AuctionServer port");
-		else
-			server = new AuctionServer(Integer.parseInt(args[0]));
+		auctionHouseName = args[0];
+        auctionHousePort = Integer.parseInt(args[1]);
+        bankHost = args[2];
+        bankPort = Integer.parseInt(args[3]);
+        ingestConfigFile(args[4]);
+
+        //Print verification on startup.
+        System.out.println("auction house name: " + auctionHouseName);
+        System.out.println("auction house port: " + auctionHousePort);
+        System.out.println("bank host: " + bankHost);
+        System.out.println("bank port: " + bankPort);
+        System.out.println("auction items list size: " + auctionItems.size());
 	}
 
 }
