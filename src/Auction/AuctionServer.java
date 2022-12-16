@@ -1,104 +1,137 @@
-package Auction;
 
-import Auction.ConnectionReqs;
-import Auction.Message;
-
+import java.awt.*;
 import java.io.IOException;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.*;
 import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-/**
- * Auction server is the main class and contains the main method.
- * It connects to the bank and then moves into a loop where it recieves
- * connections from the agents.
- */
-public class AuctionServer {
-    public static int bankPort;
-    public static String bankIp;
-    public static int dBPort;
-    public static String dBIp;
-    private static String name;
-    static int port;
-    public static int auctionId;
-    static ServerSocket auctionSocket;
-    public static ConnectionReqs reqs;
-    static Message message;
-    private static boolean running = true;
-    static List<AH_AgentThread> activeAgents = new LinkedList<>();
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 
-    /**
-     * main takes input from command line, connects to bank and receives
-     * connections to auction house from agents within a while loop.
-     * The argument in order are Auction port int, bank port int,
-     * bank ip address String, bank name String
-     */
-    public static void main(String[] args) throws IOException {
-        if(args.length != 4) {
-            System.out.println("Arg number wrong.");
-            System.exit(1);
-        }
-        String ip;
-        try (final DatagramSocket socket = new DatagramSocket()) {
-            socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
-            ip = socket.getLocalAddress().getHostAddress();
-        }
+public class AuctionServer implements Runnable {
+	public HashMap<String, ServerHandler> clientsKeeper = new HashMap<>();
+	private ServerSocket server = null;
+	private Thread thread = null;
+	private int auctionPort;
+	private static Timer timer;
+	private Socket bankSocket = null;
+	DataInputStream bankInput = null;
+	DataOutputStream bankOutput = null;
+	public ArrayList<Item> ItemToBid = new ArrayList<Item>();
+	public String auctionName;
+	private int startingFunds;
+	public String accountNumber;
 
-        //Auction port
-        port = Integer.parseInt(args[0]);
-        //bank port value
-        bankPort = Integer.parseInt(args[1]);
-        //bank ip address
-        bankIp = args[2];
-        //bank name
-        name = args[3];
+	public AuctionServer(int port) {
+		try {
+			server = new ServerSocket(port);
+			auctionPort = port;
+			auctionName = Inet4Address.getLocalHost().getHostName() + String.valueOf(port);
+			connectToBank("localhost", 4444);
+			createAccount();
+			start();
+			initAuction();
+			startingFunds = 100;
+		} catch (IOException ioe) {
+			System.out.println("Can not bind to port " + port + ": " + ioe.getMessage());
 
-        reqs = new ConnectionReqs(ip, port);
-        List<ConnectionReqs> reqsList = new ArrayList<>();
-        reqsList.add(reqs);
-        message = BankActions.getActive().registerBank(reqsList , name);
-        auctionSocket = new ServerSocket(port);
-        System.out.println("listening...");
+		}
+	}
 
-        while(running) {
-            try {
-                    Socket clientSocket = auctionSocket.accept();
-                    //processess inputs
-                    AH_AgentThread at = new AH_AgentThread(clientSocket);
-                    activeAgents.add(at);
-                    at.start();
-            } catch (IOException e) {
-                e.printStackTrace();
-                running = false;
-            }
-        }
-    }
+	public void connectToBank(String serverName, int serverPort) {
+		try {
+			bankSocket = new Socket(serverName, serverPort);
+			bankInput = new DataInputStream(bankSocket.getInputStream());
+			bankOutput = new DataOutputStream(bankSocket.getOutputStream());
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
 
-    /**
-     * getAuctionId returns auctionId
-     *
-     * @return auctionId int
-     */
-    public static int getAuctionId() {
-        return auctionId;
-    }
+	public void createAccount() {
+		try {
+			String createAcct = "createAccount" + "\t"
+					+ "AuctionHouse" + "\t"
+					+ auctionName + "\t"
+					+ startingFunds + "\t"
+					+ InetAddress.getLocalHost().getHostName() + "\t"
+					+ String.valueOf(auctionPort);
+			bankOutput.writeUTF(createAcct);
+			String createAcctRes = bankInput.readUTF();
+			String []createAcctResSplit = createAcctRes.split("\t");
+			this.accountNumber = createAcctResSplit[3];
+			System.out.println("already");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		// String message =
+	}
 
-    /**
-     * searches for agent in active agentlist of AH_AgentThreads
-     * pulls out Id to find correct one.
-     *
-     * @param id int
-     * @return AH_AgentThread
-     */
-    static AH_AgentThread agentSearch(int id) {
-        for(AH_AgentThread agent: activeAgents) {
-            if(agent.agentId == id) {
-                return agent;
-            }
-        }
-        return null;
-    }
+	public void initAuction() // function which add Item object to the array when server starts running
+	{
+		ItemToBid.add(new Item("Iphone 14s", "20"));
+		ItemToBid.add(new Item("c++ primer", "20"));
+		ItemToBid.add(new Item("mac book", "40"));
+		ItemToBid.add(new Item("airpods", "30"));
+		// ItemToBid.add(new Item("beats", "25"));
+		// ItemToBid.add(new Item("Iphone 13s", "20"));
+		// ItemToBid.add(new Item("unix programming", "20"));
+		// ItemToBid.add(new Item("huawei mate 40", "40"));
+		// ItemToBid.add(new Item("oneplus 7", "30"));
+		// ItemToBid.add(new Item("earbuds pro", "25"));
+	}
+
+	public void run() {
+		for (; thread != null;) {
+			try {
+				System.out.println("Waiting for a client ...");
+				joinUser(server.accept());
+				Thread.sleep(3000);
+
+			} catch (IOException ioe) {
+				stop();
+			} catch (InterruptedException e) {
+				System.out.println(e);
+			}
+		}
+	}
+
+	public void start() {
+		if (thread == null) {
+			thread = new Thread(this);
+			thread.start();
+		}
+	}
+
+	public void stop() {
+		thread = null;
+	}
+
+	private void joinUser(Socket socket) {
+		try {
+			DataInputStream joinIn = new DataInputStream(socket.getInputStream());
+			String newUserName = joinIn.readUTF();
+			System.out.println("Client join: " + socket);
+			ServerHandler newUser = new ServerHandler(this, socket);
+			clientsKeeper.put(newUserName, newUser);
+			newUser.open();
+			newUser.start();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public static void main(String args[]) {
+		AuctionServer server = null;
+		if (args.length != 1)
+			System.out.println("Usage: java AuctionServer port");
+		else
+			server = new AuctionServer(Integer.parseInt(args[0]));
+	}
+
 }
