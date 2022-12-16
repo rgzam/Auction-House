@@ -2,31 +2,56 @@ import java.sql.Time;
 import java.util.HashMap;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.LinkedBlockingQueue;
 
-public class Item {
-	private String name;
-	private String price;
-	private String description;
-	public String currentBid;
-	public ItemBider currentHolder;
-	public Timer timer;
+public class Item{
+	
+	//Variables for item information.
+	String itemName= "";
+	int itemID;
+    	float startingValue = 0f;
+    	float currentBid = 0f;
+    	
+    	//Variables to currently highest bidder.
+    	String highestBidder = "";
+    	int bidderAccountNumber = 0;
+    	int highestBidderConnectionID = 0;
+
+    	//Variables for timing 30 seconds.
+    	long startTime = 0;
+    	long currentTime = 0;
+    	long timeElapsed;
+    	    
 	public boolean soldOut = false;
 	public boolean soldIng = false;
-	public void timerStart() {
+	public void startTime() {
 		soldIng = true;
-		timer = new Timer("timerStart");
+		timer = new Timer("startTime");
 		timer.schedule(new TimerTask() {
 
 			@Override
 			public void run() {
-				String outbidMessage = "replace\t" + "win\t" + "replace\t" + "replace\t" + getName() + "\t"
-						+ currentBid + "\t";
+				String acceptBidMessage = "connectionNumber\t" + "bid\t" 						+"accepted";
+				currentHolder.agentHandler.send(acceptBidMessage);
+				accept = true;
+			}
+			public void run() {
+				String outBidMessage = "connectionNumber\t" + "outbid\t" + "Auction.auctionName\t" + "Auction.auctionAccountNum\t" + item + "\t"
+						+ yourBid + "\t";
 				currentHolder.agentHandler.send(outbidMessage);
-				soldOut = true;
+				lostBid = true;
 			}
 		}, 30000);
 	}
-
+    
+    /**
+     * Helper method to send an agent they won the bid.
+     */
+    protected void winner(){
+        socCmd.winner(String.valueOf(highestBidderConnectionID), itemName,
+                String.valueOf(currentBid));
+    }
+    
 	public Item(String n, String p) {
 		name = n;
 		price = p;
@@ -36,7 +61,7 @@ public class Item {
 	}
 
 	public String myToString() {
-		return name + "\t" + description + "\t" + price + "\t" + currentBid + "\t";
+		return itemName + "\t" + itemID + "\t" + startingValue + "\t" + currentBid + "\t";
 	}
 
 	public String getName() {
@@ -54,5 +79,5 @@ public class Item {
 	public void setPrice(String price) {
 		this.price = price;
 	}
-
+    
 }
