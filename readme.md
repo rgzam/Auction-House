@@ -2,7 +2,8 @@
 ## Name: Ricardo Gonzales
 ## Name: Shi Ge
 ## Name: Junyi Zheng
--Bank
+
+##Bank
 In order to start the Bank you first need to run the Bank.jar
  and it takes an input argument which will be the PortNumber
  ex: java -jar Bank.jar (portnumber)
@@ -21,7 +22,7 @@ If the auctionhouse gets disconnect the bank will update their info
 when the agent/client's ask for the updated list
 In order disconnect from the bank you must input the command "bye".
 
--Auction House
+## Auction House
 To start the auctionhouse you must enter the following command:
 java -jar AuctionHouse.jar AuctionHouse 4222 localhost 4223 items1.txt
 The Items list must be in the same path as the jar in order take as an input argument.
@@ -30,7 +31,7 @@ The AuctionHouse will display a message saying that it's receiving and sending.
 In order to shut off the auctionhouse you need to type in "q" in the console.
 If any bid's are occuring it will wait then shut down.
 
--Agent
+## Agent
 To start the Agent you must enter the following command:
 java -jar Agent.jar BankHost BankPort AgentName InitialFund
 ex: java -jar Agent.jar BankHost 4222 Chris 1000
